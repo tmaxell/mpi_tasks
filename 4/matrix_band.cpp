@@ -1,14 +1,21 @@
 #include <mpi.h>
 #include <iostream>
 #include <vector>
-#include <cstdlib>
 #include <iomanip>
+#include <cstdlib>
+#include <ctime>
 
-void print_matrix(const std::vector<std::vector<int>>& matrix, const std::string& name) {
+void initialize_matrix(std::vector<int>& matrix, int rows, int cols) {
+    for (int i = 0; i < rows * cols; ++i) {
+        matrix[i] = rand() % 10;
+    }
+}
+
+void print_matrix(const std::vector<int>& matrix, int rows, int cols, const std::string& name) {
     std::cout << name << ":\n";
-    for (const auto& row : matrix) {
-        for (int val : row) {
-            std::cout << std::setw(4) << val << " ";
+    for (int i = 0; i < rows; ++i) {
+        for (int j = 0; j < cols; ++j) {
+            std::cout << std::setw(4) << matrix[i * cols + j] << " ";
         }
         std::cout << "\n";
     }
@@ -22,59 +29,50 @@ int main(int argc, char** argv) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-    int n = 4; 
-    int m = n / size; 
+    const int N = 4; 
+    const int M = 4; 
+    const int K = 4; 
 
-    std::vector<std::vector<int>> A, B, C;
+    if (N % size != 0) {
+        if (rank == 0) {
+            std::cerr << "Ошибка: число строк матрицы A должно быть кратно числу процессов!" << std::endl;
+        }
+        MPI_Finalize();
+        return 1;
+    }
+
+    const int local_rows = N / size; 
+
+    std::vector<int> A, B(K * M), C;
+    std::vector<int> local_A(local_rows * K);
+    std::vector<int> local_C(local_rows * M, 0);
 
     if (rank == 0) {
-        A.resize(n, std::vector<int>(n));
-        B.resize(n, std::vector<int>(n));
-        for (int i = 0; i < n; ++i) {
-            for (int j = 0; j < n; ++j) {
-                A[i][j] = rand() % 10;
-                B[i][j] = rand() % 10;
+        A.resize(N * K);
+        C.resize(N * M, 0);
+        srand(static_cast<unsigned>(time(nullptr)));
+        initialize_matrix(A, N, K);
+        initialize_matrix(B, K, M);
+
+        print_matrix(A, N, K, "Матрица A");
+        print_matrix(B, K, M, "Матрица B");
+    }
+
+    MPI_Scatter(A.data(), local_rows * K, MPI_INT, local_A.data(), local_rows * K, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Bcast(B.data(), K * M, MPI_INT, 0, MPI_COMM_WORLD);
+
+    for (int i = 0; i < local_rows; ++i) {
+        for (int j = 0; j < M; ++j) {
+            for (int k = 0; k < K; ++k) {
+                local_C[i * M + j] += local_A[i * K + k] * B[k * M + j];
             }
         }
-        C.resize(n, std::vector<int>(n, 0));
     }
 
-    MPI_Bcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
-
-    std::vector<int> local_A(m * n);
-    std::vector<int> local_C(m * n, 0);
-    std::vector<int> B_flat(n * n);
+    MPI_Gather(local_C.data(), local_rows * M, MPI_INT, C.data(), local_rows * M, MPI_INT, 0, MPI_COMM_WORLD);
 
     if (rank == 0) {
-        for (int i = 0; i < size; ++i) {
-            MPI_Send(&A[i * m][0], m * n, MPI_INT, i, 0, MPI_COMM_WORLD);
-        }
-        std::copy(B[0].begin(), B[0].end(), B_flat.begin());
-    }
-    MPI_Bcast(B_flat.data(), n * n, MPI_INT, 0, MPI_COMM_WORLD);
-    MPI_Recv(local_A.data(), m * n, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-
-    for (int i = 0; i < m; ++i) {
-        for (int j = 0; j < n; ++j) {
-            for (int k = 0; k < n; ++k) {
-                local_C[i * n + j] += local_A[i * n + k] * B_flat[k * n + j];
-            }
-        }
-    }
-
-    // cбор локальных частей матрицы C на процессе 0
-    if (rank == 0) {
-        for (int i = 0; i < size; ++i) {
-            MPI_Recv(&C[i * m][0], m * n, MPI_INT, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-        }
-    } else {
-        MPI_Send(local_C.data(), m * n, MPI_INT, 0, 0, MPI_COMM_WORLD);
-    }
-
-    if (rank == 0) {
-        print_matrix(A, "Матрица A");
-        print_matrix(B, "Матрица B");
-        print_matrix(C, "Матрица C (результат)");
+        print_matrix(C, N, M, "Матрица C (результат)");
     }
 
     MPI_Finalize();
