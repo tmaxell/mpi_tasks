@@ -7,6 +7,23 @@
 #include <fstream>
 #include <chrono>
 
+int get_vector_size(int argc, char** argv, int rank) {
+    int n = 12; 
+    if (argc > 1) {
+        n = std::atoi(argv[1]);
+    } else if (rank == 0) { 
+        std::cout << "Введите размер вектора: ";
+        std::cin >> n;
+        if (n <= 0) {
+            std::cerr << "Некорректное значение. Используется значение по умолчанию: 12." << std::endl;
+            n = 12;
+        }
+    }
+    // распространение значения n на все процессы
+    MPI_Bcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    return n;
+}
+
 int main(int argc, char** argv) {
     MPI_Init(&argc, &argv);
 
@@ -15,17 +32,8 @@ int main(int argc, char** argv) {
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
     std::ofstream log_file("process_" + std::to_string(rank) + ".log");
-    int n = 12;
-    if (argc > 1) {
-        n = std::atoi(argv[1]);
-        if (n <= 0) {
-            if (rank == 0) {
-                std::cerr << "Некорректное значение длины вектора. Используется значение по умолчанию: 12." << std::endl;
-            }
-            n = 12;
-        }
-    }
 
+    int n = get_vector_size(argc, argv, rank);
     log_file << "Процесс " << rank << ": размер вектора n = " << n << std::endl;
     log_file << "Процесс " << rank << ": количество процессов = " << size << std::endl;
     auto start_time = std::chrono::high_resolution_clock::now();
@@ -35,10 +43,13 @@ int main(int argc, char** argv) {
 
     if (rank == 0) {
         vector.resize(n);
-        srand(static_cast<unsigned>(time(0))); 
+        srand(static_cast<unsigned>(time(0)));
+        std::cout << "Вектор: ";
         for (int i = 0; i < n; ++i) {
             vector[i] = rand() % 100;
+            std::cout << vector[i] << " ";
         }
+        std::cout << std::endl;
     }
 
     int local_size = n / size + (rank < n % size ? 1 : 0);
