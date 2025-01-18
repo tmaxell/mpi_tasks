@@ -40,7 +40,7 @@ int main(int argc, char** argv) {
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     int computation_time = 1000;  // время вычислений (в микросекундах)
     int message_size = 100;       // размер сообщений (в элементах int)
-    int repetitions = 10;         // количество повторений передачи сообщений
+    int repetitions = 10000;         // количество повторений передачи сообщений
     if (argc > 1) computation_time = std::atoi(argv[1]); // объем вычислений
     if (argc > 2) message_size = std::atoi(argv[2]);     // объем коммуникаций
     if (argc > 3) repetitions = std::atoi(argv[3]);      // число повторений

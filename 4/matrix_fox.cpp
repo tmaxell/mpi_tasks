@@ -51,6 +51,7 @@ int main(int argc, char** argv) {
         print_matrix(A, "Матрица A", n);
         print_matrix(B, "Матрица B", n);
     }
+
     std::vector<int> local_A(block_size * block_size);
     std::vector<int> local_B(block_size * block_size);
     std::vector<int> local_C(block_size * block_size, 0);
@@ -64,13 +65,16 @@ int main(int argc, char** argv) {
     // координаты процесса в сетке
     int coords[2];
     MPI_Cart_coords(grid_comm, rank, 2, coords);
-    int row_rank, col_rank;
 
     // подкоммуникаторы для строк и столбцов
     MPI_Comm row_comm, col_comm;
     MPI_Comm_split(grid_comm, coords[0], coords[1], &row_comm);
     MPI_Comm_split(grid_comm, coords[1], coords[0], &col_comm);
 
+    MPI_Barrier(MPI_COMM_WORLD);
+    double start_time = MPI_Wtime();
+
+    // распределение блоков
     if (rank == 0) {
         for (int i = 0; i < q; ++i) {
             for (int j = 0; j < q; ++j) {
@@ -105,8 +109,11 @@ int main(int argc, char** argv) {
         MPI_Recv(local_B.data(), block_size * block_size, MPI_INT, 0, 1, grid_comm, MPI_STATUS_IGNORE);
     }
 
+    double init_time = MPI_Wtime();
+
     // алгоритм Фокса
     std::vector<int> temp_A(block_size * block_size);
+    double comp_start_time = MPI_Wtime();
     for (int step = 0; step < q; ++step) {
         int pivot = (coords[0] + step) % q;
         if (coords[1] == pivot) {
@@ -123,14 +130,15 @@ int main(int argc, char** argv) {
             }
         }
 
-        // циклический сдвиг столбцов
+        // циклический сдвиг
         MPI_Sendrecv_replace(local_B.data(), block_size * block_size, MPI_INT,
                              (coords[0] + 1) % q, 2,
                              (coords[0] - 1 + q) % q, 2,
                              col_comm, MPI_STATUS_IGNORE);
     }
+    double comp_end_time = MPI_Wtime();
 
-    // cборка результата
+    // сборка результата
     if (rank == 0) {
         for (int i = 0; i < q; ++i) {
             for (int j = 0; j < q; ++j) {
@@ -160,6 +168,12 @@ int main(int argc, char** argv) {
     } else {
         MPI_Send(local_C.data(), block_size * block_size, MPI_INT, 0, 3, grid_comm);
     }
+
+    double end_time = MPI_Wtime();
+    std::cout << "Процесс " << rank << ": "
+              << "инициализация = " << (init_time - start_time) * 1000 << " мс, "
+              << "вычисления = " << (comp_end_time - comp_start_time) * 1000 << " мс, "
+              << "общее время = " << (end_time - start_time) * 1000 << " мс.\n";
 
     MPI_Finalize();
     return 0;

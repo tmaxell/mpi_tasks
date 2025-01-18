@@ -58,9 +58,13 @@ int main(int argc, char** argv) {
         print_matrix(B, K, M, "Матрица B");
     }
 
+    MPI_Barrier(MPI_COMM_WORLD); // Синхронизация перед началом измерений
+    double start_time = MPI_Wtime();
+
     MPI_Scatter(A.data(), local_rows * K, MPI_INT, local_A.data(), local_rows * K, MPI_INT, 0, MPI_COMM_WORLD);
     MPI_Bcast(B.data(), K * M, MPI_INT, 0, MPI_COMM_WORLD);
 
+    double computation_start = MPI_Wtime();
     for (int i = 0; i < local_rows; ++i) {
         for (int j = 0; j < M; ++j) {
             for (int k = 0; k < K; ++k) {
@@ -68,8 +72,20 @@ int main(int argc, char** argv) {
             }
         }
     }
+    double computation_end = MPI_Wtime();
 
     MPI_Gather(local_C.data(), local_rows * M, MPI_INT, C.data(), local_rows * M, MPI_INT, 0, MPI_COMM_WORLD);
+
+    double end_time = MPI_Wtime();
+
+    // Логгирование времени выполнения
+    double total_time = end_time - start_time;
+    double computation_time = computation_end - computation_start;
+
+    std::cout << "Процесс " << rank 
+              << ": общее время = " << total_time * 1000 << " мс, "
+              << "время вычислений = " << computation_time * 1000 << " мс" 
+              << std::endl;
 
     if (rank == 0) {
         print_matrix(C, N, M, "Матрица C (результат)");

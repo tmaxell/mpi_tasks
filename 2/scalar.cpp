@@ -2,6 +2,7 @@
 #include <iostream>
 #include <vector>
 #include <cstdlib>
+#include <chrono>
 
 int main(int argc, char** argv) {
     MPI_Init(&argc, &argv);
@@ -10,7 +11,13 @@ int main(int argc, char** argv) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-    const int n = 12;
+    int n = 100;
+    if (rank == 0) {
+        std::cout << "Введите размер вектора: ";
+        std::cin >> n;
+    }
+    MPI_Bcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
     std::vector<int> vector_a, vector_b;
     std::vector<int> local_a, local_b;
 
@@ -49,6 +56,8 @@ int main(int argc, char** argv) {
     MPI_Scatterv(vector_b.data(), send_counts.data(), displs.data(), MPI_INT,
                  local_b.data(), local_size, MPI_INT, 0, MPI_COMM_WORLD);
 
+    auto start_time = std::chrono::high_resolution_clock::now();
+
     int local_dot_product = 0;
     for (int i = 0; i < local_size; ++i) {
         local_dot_product += local_a[i] * local_b[i];
@@ -56,6 +65,11 @@ int main(int argc, char** argv) {
 
     int global_dot_product = 0;
     MPI_Reduce(&local_dot_product, &global_dot_product, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+
+    auto end_time = std::chrono::high_resolution_clock::now();
+    double elapsed_time = std::chrono::duration<double, std::milli>(end_time - start_time).count();
+    std::cout << "Процесс " << rank << ": локальное скалярное произведение = " 
+              << local_dot_product << ", время выполнения = " << elapsed_time << " мс" << std::endl;
 
     if (rank == 0) {
         std::cout << "Скалярное произведение: " << global_dot_product << std::endl;
