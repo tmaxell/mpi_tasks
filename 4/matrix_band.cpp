@@ -77,8 +77,6 @@ int main(int argc, char** argv) {
     MPI_Gather(local_C.data(), local_rows * M, MPI_INT, C.data(), local_rows * M, MPI_INT, 0, MPI_COMM_WORLD);
 
     double end_time = MPI_Wtime();
-
-    // Логгирование времени выполнения
     double total_time = end_time - start_time;
     double computation_time = computation_end - computation_start;
 
